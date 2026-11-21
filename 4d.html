@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Cpath d=%27M4 22 L16 28 L28 22 L16 16Z%27 fill=%27%23a9aeb6%27/%3E%3Cpath d=%27M4 12 L16 6 L28 12 L16 18Z%27 fill=%27%23e07b00%27/%3E%3Cpath d=%27M4 12 V22 L16 28 V18Z%27 fill=%27%23d8d2c8%27/%3E%3Cpath d=%27M28 12 V22 L16 28 V18Z%27 fill=%27%23c9c2b6%27/%3E%3C/svg%3E">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>4D-planlegger for IFC</title>
+<style>
+@font-face{font-family:Literata;font-style:normal;font-weight:400;font-display:swap;src:url(vendor/fonts/literata-latin-400-normal.woff2) format('woff2')}
+@font-face{font-family:Literata;font-style:normal;font-weight:600;font-display:swap;src:url(vendor/fonts/literata-latin-600-normal.woff2) format('woff2')}
+.nav{display:flex;gap:4px;font-size:14px}.nav a{color:var(--mute);text-decoration:none;padding:4px 8px;border-radius:6px}.nav a:hover{color:var(--blue)}.nav a[aria-current]{color:var(--ink);font-weight:600}
+.dirty{color:var(--go,#e07b00)}
+/* VOICE: arbeidsverktøy for anleggsleder og kalkyle; rolig, presist, tallene og datoen i fokus.
+   IDEA: en byggeplassplan på veggen — modellen i midten, fremdriftsplanen som gantt ved siden av, datoen som tidslinje under.
+   PICTURE: 3D-modellen som vokser fram dag for dag; ferdig, pågår og ikke startet i tydelige farger.
+   COLOUR and TYPE: hvitt ark, blekk #10131a, prøyssisk blå for handling, oransje for pågår, karmin for valgt; Literata.
+   LAYOUT: modeller og filtre til venstre, 3D og tidslinje i midten, aktiviteter/mengder/egenskaper til høyre; stables smalt. */
+:root{color-scheme:light dark;
+ --bg:light-dark(#ffffff,#0f1217);--panel:light-dark(#f6f7f9,#151a22);--ink:light-dark(#10131a,#e7eaf0);--mute:light-dark(#5b6270,#9aa3b2);
+ --line:light-dark(#dde1e7,#273041);--blue:light-dark(#0b4f8a,#6fa8dc);--red:light-dark(#c1121f,#ff5a66);--canvas:light-dark(#eef1f4,#0b0e13);
+ --go:#e07b00;--done:light-dark(#0b4f8a,#6fa8dc)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 Literata,Georgia,serif;overflow:hidden}
+button,select,input{font:inherit;color:inherit}
+button,.btn{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:6px 12px;border:1px solid var(--line);border-radius:6px;background:var(--bg);cursor:pointer;white-space:nowrap}
+button:hover,.btn:hover{border-color:var(--blue)}
+button:disabled{opacity:.45;cursor:default}
+button.pri,.btn.pri{background:var(--blue);border-color:var(--blue);color:#fff}
+button:focus-visible,select:focus-visible,input:focus-visible,.btn:focus-within{outline:2px solid var(--blue);outline-offset:2px}
+select,input[type=search],input[type=date]{min-height:36px;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);font-size:16px}
+.app{display:grid;grid-template-rows:auto 1fr;height:100dvh}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 16px;border-bottom:1px solid var(--line)}
+header h1{font-size:20px;font-weight:600;margin:0 6px 0 0;line-height:1.1}
+header .file{color:var(--mute);font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:30ch}
+header .sp{flex:1}
+.grp{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.main{display:grid;grid-template-columns:240px minmax(0,1fr) 430px;min-height:0}
+aside{background:var(--panel);overflow:auto;min-height:0}
+.left{border-right:1px solid var(--line);padding:12px 14px}
+.right{border-left:1px solid var(--line);display:flex;flex-direction:column}
+h2{font-size:15px;font-weight:600;margin:14px 0 6px;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+h2:first-child{margin-top:0}
+h2 small{font-weight:400;font-size:13px}
+h2 small a{color:var(--blue);cursor:pointer;text-decoration:underline;margin-left:8px}
+.chk{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:14px;cursor:pointer}
+.chk input{width:16px;height:16px;accent-color:var(--blue);flex:none}
+.chk .n{margin-left:auto;color:var(--mute);font-variant-numeric:tabular-nums;font-size:13px}
+.chk .sw{width:10px;height:10px;border-radius:2px;flex:none}
+.center{display:grid;grid-template-rows:1fr auto;min-height:0}
+.viewer{position:relative;background:var(--canvas);min-height:0}
+.viewer canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.tools{position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:6px}
+.tools button{justify-content:center;min-width:44px}
+.datebig{position:absolute;left:14px;top:10px;pointer-events:none;max-width:60%}
+.datebig .d{font-size:clamp(22px,3vw,34px);font-weight:600;line-height:1.05}
+.datebig .a{font-size:13.5px;color:var(--mute);margin-top:4px}
+.datebig .a b{color:var(--go);font-weight:600}
+.overlay{position:absolute;inset:0;display:grid;place-items:center;background:color-mix(in srgb,var(--canvas) 82%,transparent);text-align:center;padding:20px;z-index:3}
+.overlay[hidden]{display:none}
+.overlay .box{max-width:480px}.overlay .big{font-size:22px;font-weight:600;margin-bottom:6px}
+.drop{outline:3px dashed var(--blue);outline-offset:-10px}
+.timeline{border-top:1px solid var(--line);padding:8px 12px;display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;gap:6px 10px;align-items:center;background:var(--bg)}
+.timeline input[type=range]{width:100%;accent-color:var(--go);height:28px}
+.timeline .now{font-variant-numeric:tabular-nums;font-weight:600;min-width:7.5em;text-align:right}
+.legend{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13px;color:var(--mute);align-items:center}
+.legend i{display:inline-block;width:11px;height:11px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.tabs{display:flex;border-bottom:1px solid var(--line)}
+.tabs button{flex:1;border:0;border-radius:0;background:transparent;border-bottom:3px solid transparent;justify-content:center;min-height:44px}
+.tabs button[aria-selected=true]{border-bottom-color:var(--blue);font-weight:600}
+.pane{overflow:auto;padding:12px 14px;flex:1;min-height:0}
+.pane[hidden]{display:none}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;font-size:14px}
+.card{border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:10px 12px;margin-bottom:10px}
+.card h3{margin:0 0 4px;font-size:16px}
+.card .meta{font-size:13px;color:var(--mute);margin-bottom:8px}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{padding:5px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-weight:600;color:var(--mute);font-size:13px}
+td.r,th.r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.g td{font-weight:600;background:color-mix(in srgb,var(--blue) 7%,transparent)}
+tr.it{cursor:pointer}tr.it:hover td{background:color-mix(in srgb,var(--blue) 10%,transparent)}
+tr.tot td{font-weight:600;border-top:2px solid var(--ink);border-bottom:0}
+tr.sub td{font-size:12.5px;color:var(--mute);padding-top:2px;padding-bottom:2px}
+.est{color:var(--mute)}
+.note{font-size:13px;color:var(--mute);margin-top:10px}
+.gantt{position:relative;--now:-10%}
+.task{display:grid;grid-template-columns:minmax(0,1fr) 44%;gap:8px;align-items:center;padding:4px 4px;border-bottom:1px solid var(--line);cursor:pointer;font-size:13.5px}
+.task:hover{background:color-mix(in srgb,var(--blue) 7%,transparent)}
+.task.on{background:color-mix(in srgb,var(--blue) 15%,transparent);box-shadow:inset 4px 0 0 var(--blue)}
+.task.lk{background:color-mix(in srgb,var(--red) 10%,transparent);box-shadow:inset 4px 0 0 var(--red)}
+.task.lk .t{font-weight:600}
+.task.on.lk{box-shadow:inset 4px 0 0 var(--blue),inset 8px 0 0 var(--red)}
+.task.sum .nm{font-weight:600}
+.task .nm{display:flex;gap:4px;align-items:baseline;overflow:hidden}
+.task .nm span.t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.task .cnt{flex:none;margin-left:auto;font-size:12px;color:var(--mute);font-variant-numeric:tabular-nums;white-space:nowrap;padding-left:4px}
+.task .cnt.l{color:var(--blue);font-weight:600}
+.task .car{width:16px;flex:none;text-align:center;color:var(--mute)}
+.track{position:relative;height:16px}
+.track::after{content:"";position:absolute;top:-6px;bottom:-6px;left:var(--now);width:2px;background:var(--go)}
+.bar{position:absolute;top:3px;height:10px;border-radius:2px;background:color-mix(in srgb,var(--blue) 55%,transparent)}
+.sum .bar{background:var(--ink);height:6px;top:5px}
+.bar.ms{width:10px!important;height:10px;transform:translateX(-5px) rotate(45deg);background:var(--ink)}
+.bar.rv{background:color-mix(in srgb,#db2777 65%,transparent)}.bar.tmp{background:color-mix(in srgb,#8b5cf6 60%,transparent)}
+.scale{display:grid;grid-template-columns:minmax(0,1fr) 44%;gap:8px;font-size:11.5px;color:var(--mute);padding:0 4px 4px;border-bottom:1px solid var(--line);position:sticky;top:-12px;background:var(--panel);z-index:1}
+.scale .ticks{position:relative;height:16px}
+.scale .ticks span{position:absolute;transform:translateX(-50%);white-space:nowrap}
+dl{display:grid;grid-template-columns:minmax(0,11em) minmax(0,1fr);gap:3px 10px;margin:0 0 10px;font-size:13.5px}
+dt{color:var(--mute)}dd{margin:0;overflow-wrap:anywhere}
+details{margin:6px 0;border:1px solid var(--line);border-radius:6px;background:var(--bg)}
+summary{cursor:pointer;padding:6px 10px;font-weight:600;font-size:14px}
+details dl{padding:4px 10px 8px}
+.empty{color:var(--mute);font-size:14px}
+.models .chk{align-items:flex-start}
+.models .x{margin-left:auto;border:0;background:none;min-height:20px;padding:0 4px;color:var(--mute)}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.4);display:grid;place-items:center;z-index:9;padding:12px}
+.modal[hidden]{display:none}
+.modal .box{background:var(--bg);border-radius:10px;padding:16px 18px;width:min(560px,94vw);max-height:90vh;overflow:auto}
+.modal h3{margin:0 0 8px}
+.modal textarea{width:100%;height:220px;font:13px/1.4 ui-monospace,monospace;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:6px}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:6px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:10;max-width:90vw}
+.toast.on{opacity:1}
+@media(max-width:1200px){.main{grid-template-columns:220px minmax(0,1fr) 380px}}
+@media(max-width:960px){
+ body{overflow:auto}.app{height:auto;min-height:100dvh}
+ .main{grid-template-columns:minmax(0,1fr)}
+ .center{order:1}.viewer{height:58vh}.right{order:2;border-left:0;border-top:1px solid var(--line)}.left{order:3;border-right:0;border-top:1px solid var(--line)}
+ .pane{overflow:visible;max-height:none}.scale{top:0}
+ .tools{flex-direction:row;flex-wrap:wrap;left:8px;right:8px;top:auto;bottom:8px}.tools button{min-height:34px;padding:4px 10px;font-size:14px}
+ .timeline{grid-template-columns:auto auto minmax(0,1fr)}.timeline .now{grid-column:1/-1;text-align:left}}
+@media(prefers-reduced-motion:reduce){.toast{transition:none}}
+</style>
+<script type="importmap">{"imports":{
+ "three":"./vendor/three/three.module.js",
+ "three/addons/":"./vendor/three/addons/",
+ "web-ifc":"./vendor/web-ifc/web-ifc-api.js"}}</script>
+</head>
+<body>
+<div class="app">
+<header>
+ <h1>4D-planlegger</h1>
+ <nav class="nav"><a href="./">Hjem</a><a href="ifc-leser.html">IFC-leser</a></nav>
+ <span class="file" id="projName">Nytt 4D-prosjekt</span><span class="dirty" id="dirty" hidden title="Ulagrede endringer">● ikke lagret</span>
+ <span class="sp"></span>
+ <div class="grp">
+  <label class="btn" for="ifcInp">Legg til IFC</label><input type="file" id="ifcInp" accept=".ifc,.IFC" multiple hidden>
+  <label class="btn" for="schInp">Importer fremdriftsplan</label><input type="file" id="schInp" accept=".xml,.xlsx,.xls,.csv,.txt,.mpp" hidden>
+  <button id="openBtn" type="button">Åpne 4D-fil</button><input type="file" id="prjInp" accept=".json" hidden>
+  <button id="saveBtn" class="pri" type="button" title="Ctrl+S">Lagre</button>
+  <button id="saveAsBtn" type="button">Lagre som …</button>
+  <button id="sampleBtn" type="button" hidden>Eksempel</button>
+ </div>
+</header>
+<div class="main">
+ <aside class="left">
+  <h2>Modeller</h2>
+  <div id="modelList" class="models empty">Ingen IFC-filer lastet.</div>
+  <h2>Søk</h2>
+  <input type="search" id="search" placeholder="Navn eller type …" style="width:100%">
+  <h2>Etasjer <small><a data-all="storey">alle</a><a data-none="storey">ingen</a></small></h2>
+  <div id="storeyList" class="empty">—</div>
+  <h2>Elementtyper <small><a data-all="cls">alle</a><a data-none="cls">ingen</a></small></h2>
+  <div id="classList" class="empty">—</div>
+  <h2>Farge</h2>
+  <select id="colorMode" style="width:100%"><option value="class">Etter elementtype</option><option value="storey">Etter etasje</option><option value="link">Koblet / ikke koblet</option><option value="model">Modellens farger</option></select>
+  <label class="chk" style="margin-top:6px"><input type="checkbox" id="edgesChk" checked> Vis kanter</label>
+ </aside>
+ <div class="center">
+ <section class="viewer" id="viewer">
+  <canvas id="cv"></canvas>
+  <div class="datebig" id="dateBig" hidden><div class="d" id="dateTxt"></div><div class="a" id="actTxt"></div></div>
+  <div class="tools">
+   <button id="fitBtn" type="button">Tilpass</button>
+   <button id="topBtn" type="button">Topp</button>
+   <button id="isoBtn" type="button">3D</button>
+   <button id="selVis" type="button" title="Velg alle synlige elementer">Velg synlige</button>
+   <button id="isoSel" type="button">Isoler</button>
+   <button id="hideSel" type="button">Skjul</button>
+   <button id="showAll" type="button">Vis alt</button>
+  </div>
+  <div class="overlay" id="overlay"><div class="box"><div class="big" id="ovTitle">Starter IFC-motoren …</div><div id="ovText">Filene leses bare i nettleseren din og lastes ikke opp noe sted.</div></div></div>
+ </section>
+ <div class="timeline">
+  <button id="playBtn" type="button" aria-label="Spill av" style="min-width:44px;justify-content:center">▶</button>
+  <select id="speed" aria-label="Hastighet"><option value="2">2 dager/s</option><option value="7" selected>1 uke/s</option><option value="14">2 uker/s</option><option value="30">1 mnd/s</option></select>
+  <input type="range" id="slider" min="0" max="1" step="1" value="0" aria-label="Dato">
+  <span class="now" id="nowTxt">–</span>
+  <div class="legend">
+   <label class="chk" style="padding:0"><input type="checkbox" id="simChk"> 4D-visning</label>
+   <label>Ikke koblet <select id="unlinked" style="min-height:30px;font-size:14px"><option value="ghost">skygge</option><option value="hide">skjul</option><option value="show">vis</option></select></label>
+   <label>Ikke startet <select id="future" style="min-height:30px;font-size:14px"><option value="hide">skjul</option><option value="ghost">skygge</option></select></label>
+   <span><i style="background:#b9c3cf"></i>Ferdig (vanlig farge)</span><span><i style="background:var(--go)"></i>Pågår</span><span><i style="background:#db2777"></i>Rives</span><span><i style="background:#8b5cf6"></i>Midlertidig</span><span><i style="background:#2f6fd6"></i>Valgt aktivitet</span><span><i style="background:#c1121f"></i>Valgt element</span>
+  </div>
+ </div>
+ </div>
+ <aside class="right">
+  <div class="tabs" role="tablist">
+   <button role="tab" aria-selected="true" data-tab="act" type="button">Aktiviteter</button>
+   <button role="tab" aria-selected="false" data-tab="qty" type="button">Mengder</button>
+   <button role="tab" aria-selected="false" data-tab="props" type="button">Egenskaper</button>
+  </div>
+  <div class="pane" id="pane-act">
+   <div id="taskCard"></div>
+   <div class="row"><input type="search" id="taskSearch" placeholder="Søk i aktiviteter …" style="flex:1"><button id="autoBtn" type="button" title="Foreslå koblinger for alle aktiviteter ut fra navn på etasje og elementtype">Autokoble</button></div>
+   <div id="gantt" class="gantt empty">Importer en fremdriftsplan (MS Project: Lagre som → XML, eller Excel/CSV).</div>
+  </div>
+  <div class="pane" id="pane-qty" hidden>
+   <div class="row">
+    <label>Grupper <select id="groupBy">
+     <option value="task">Aktivitet</option><option value="cls-type">Elementtype › type</option><option value="storey-cls">Etasje › elementtype</option></select></label>
+    <label class="chk" style="padding:0"><input type="checkbox" id="selOnly"> Bare valgte</label>
+    <button id="copyBtn" type="button">Kopier til Excel</button>
+   </div>
+   <div id="qtyTable" class="empty">Ingen modell lastet.</div>
+   <p class="note">Mengdene gjelder synlige elementer (i 4D-visning: det som er bygget eller pågår på valgt dato). Tall fra modellens mengdesett (Qto); <span class="est">grå volum</span> er beregnet fra geometrien. Lengde og areal summeres bare innen én elementtype.</p>
+  </div>
+  <div class="pane" id="pane-props" hidden><div id="props" class="empty">Klikk et element i modellen.</div></div>
+ </aside>
+</div>
+</div>
+<div class="modal" id="modal" hidden><div class="box" id="modalBox"></div></div>
+<div class="toast" id="toast"></div>
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import * as WebIFC from 'web-ifc';
+{
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const nf1=new Intl.NumberFormat('nb-NO',{maximumFractionDigits:1,minimumFractionDigits:1});
+const nf2=new Intl.NumberFormat('nb-NO',{maximumFractionDigits:2,minimumFractionDigits:2});
+const nf0=new Intl.NumberFormat('nb-NO',{maximumFractionDigits:0});
+const DAY=864e5;
+const dFmt=new Intl.DateTimeFormat('nb-NO',{day:'2-digit',month:'2-digit',year:'numeric'});
+const dLong=new Intl.DateTimeFormat('nb-NO',{weekday:'short',day:'numeric',month:'long',year:'numeric'});
+const dMon=new Intl.DateTimeFormat('nb-NO',{month:'short',year:'2-digit'});
+const fd=t=>t==null?'–':dFmt.format(new Date(t));
+const toast=t=>{const e=$('#toast');e.textContent=t;e.classList.add('on');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('on'),2600)};
+const ov=(title,text)=>{$('#overlay').hidden=!title;if(title){$('#ovTitle').textContent=title;if(text!=null)$('#ovText').textContent=text}};
+const tick=()=>new Promise(r=>setTimeout(r,20));
+const store={get(k,d){try{return localStorage.getItem(k)??d}catch{return d}},set(k,v){try{localStorage.setItem(k,v)}catch{}}};
+const modal=html=>{$('#modalBox').innerHTML=html;$('#modal').hidden=!html};
+$('#modal').addEventListener('click',ev=>{if(ev.target.id==='modal'||ev.target.closest('[data-close]'))modal('')});
+
+/* ---------- binærhjelpere ---------- */
+const b64dec=s=>{const bin=atob(s.replace(/\s+/g,''));const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return u};
+const b64enc=u=>{let s='';for(let i=0;i<u.length;i+=0x8000)s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return btoa(s)};
+const gunzip=async u=>new Uint8Array(await new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
+const gzip=async u=>new Uint8Array(await new Response(new Blob([u]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
+/* ---------- navn og farger ---------- */
+const NO={IfcWall:'Vegg',IfcWallStandardCase:'Vegg',IfcSlab:'Dekke',IfcColumn:'Søyle',IfcBeam:'Bjelke',IfcDoor:'Dør',IfcWindow:'Vindu',IfcSpace:'Rom',IfcRoof:'Tak',IfcStair:'Trapp',IfcStairFlight:'Trappeløp',IfcRamp:'Rampe',IfcRampFlight:'Rampeløp',IfcRailing:'Rekkverk',IfcCovering:'Kledning/himling',IfcCurtainWall:'Glassfasade',IfcPlate:'Plate',IfcMember:'Stav/profil',IfcFooting:'Fundament',IfcPile:'Pæl',IfcBuildingElementProxy:'Diverse (proxy)',IfcBuildingElementPart:'Elementdel',IfcElementAssembly:'Sammenstilling',IfcDuctSegment:'Kanal',IfcDuctFitting:'Kanaldel',IfcAirTerminal:'Ventil',IfcUnitaryEquipment:'Aggregat',IfcPipeSegment:'Rør',IfcPipeFitting:'Rørdel',IfcFlowTerminal:'Endeutstyr',IfcSanitaryTerminal:'Sanitærutstyr',IfcLightFixture:'Lysarmatur',IfcCableCarrierSegment:'Kabelbro',IfcFurnishingElement:'Inventar',IfcFurniture:'Møbel',IfcReinforcingBar:'Armering',IfcSite:'Tomt',IfcGeographicElement:'Terrengelement',IfcFlowSegment:'Føring',IfcFlowFitting:'Føringsdel',IfcDistributionElement:'Teknisk element',IfcTransportElement:'Heis/transport'};
+const CLS_COL={IfcWall:'#d8d2c8',IfcWallStandardCase:'#d8d2c8',IfcSlab:'#a9aeb6',IfcColumn:'#7d8592',IfcBeam:'#7d8592',IfcDoor:'#9a6b3a',IfcWindow:'#7fb2d6',IfcSpace:'#3f86d0',IfcRoof:'#8f4a43',IfcStair:'#b7a58c',IfcStairFlight:'#b7a58c',IfcRailing:'#55606e',IfcCovering:'#cfc6b4',IfcCurtainWall:'#7fb2d6',IfcPlate:'#9fb6c8',IfcMember:'#6c7480',IfcFooting:'#8c8c8c',IfcBuildingElementProxy:'#d0731e',IfcDuctSegment:'#2a6db3',IfcDuctFitting:'#3f86d0',IfcAirTerminal:'#e0a21b',IfcUnitaryEquipment:'#5d6672',IfcPipeSegment:'#2f8f6a',IfcPipeFitting:'#2f8f6a',IfcFurnishingElement:'#b88a5a',IfcFurniture:'#b88a5a',IfcSite:'#8aa66b'};
+// søkeord i aktivitetsnavn -> IFC-klasser (for autokobling)
+const KEYS=[[/vegg/,['IfcWall','IfcWallStandardCase','IfcCurtainWall']],[/søyle/,['IfcColumn']],[/bjelke|drager/,['IfcBeam']],[/dekke|bunnplate|plate på mark|gulv på grunn|hulldekke/,['IfcSlab']],
+ [/tak\b|taktekking/,['IfcRoof']],[/trapp/,['IfcStair','IfcStairFlight']],[/rampe/,['IfcRamp','IfcRampFlight']],[/rekkverk/,['IfcRailing']],[/vindu/,['IfcWindow']],[/dør/,['IfcDoor']],
+ [/fasade|glass/,['IfcCurtainWall','IfcPlate']],[/himling|kledning/,['IfcCovering']],[/fundament|såle/,['IfcFooting']],[/pel|pæl/,['IfcPile']],
+ [/ventilasjon|kanal/,['IfcDuctSegment','IfcDuctFitting','IfcAirTerminal']],[/aggregat/,['IfcUnitaryEquipment']],[/hulltaking|gjennomføring/,['IfcBuildingElementProxy']],
+ [/rør|sanitær|vvs/,['IfcPipeSegment','IfcPipeFitting','IfcSanitaryTerminal']],[/elektro|kabel/,['IfcCableCarrierSegment','IfcLightFixture']]];
+const TRANSP=new Set(['IfcSpace','IfcWindow','IfcCurtainWall']);
+const hashCol=s=>{let h=0;for(const c of s)h=(h*31+c.charCodeAt(0))|0;return new THREE.Color().setHSL(((h>>>0)%360)/360,.45,.55)};
+const clsColor=c=>CLS_COL[c]?new THREE.Color(CLS_COL[c]):hashCol(c);
+const clsName=c=>NO[c]||c.replace(/^Ifc/,'');
+const stCol=i=>new THREE.Color().setHSL((0.58+i*0.13)%1,.5,.52);
+
+/* ---------- three ---------- */
+const cv=$('#cv'),viewer=$('#viewer');
+const renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+const scene=new THREE.Scene();const camera=new THREE.PerspectiveCamera(45,1,0.1,20000);camera.position.set(60,60,60);
+const controls=new OrbitControls(camera,cv);controls.enableDamping=true;controls.dampingFactor=.12;controls.screenSpacePanning=true;
+scene.add(new THREE.HemisphereLight(0xffffff,0x8a8f99,1.6));
+const sun=new THREE.DirectionalLight(0xffffff,1.6);sun.position.set(1,2,1.4);scene.add(sun);
+const sun2=new THREE.DirectionalLight(0xffffff,.5);sun2.position.set(-1,.6,-1.2);scene.add(sun2);
+const root=new THREE.Group();scene.add(root);
+const bgCol=()=>{scene.background=new THREE.Color(getComputedStyle(viewer).backgroundColor);needs=true};
+let needs=true;
+const resize=()=>{const w=viewer.clientWidth,h=viewer.clientHeight;if(!w||!h)return;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();needs=true};
+const ro=new ResizeObserver(resize);ro.observe(viewer);
+const themeObs=new MutationObserver(bgCol);themeObs.observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',bgCol);bgCol();
+controls.addEventListener('change',()=>needs=true);
+const matCache=new Map();
+const mat=(color,transparent,vc,op)=>{const k=(vc?'vc':color.getHexString())+(transparent?'t'+(op||.32):'');
+ if(!matCache.has(k))matCache.set(k,new THREE.MeshLambertMaterial({color:vc?0xffffff:color,vertexColors:!!vc,transparent:!!transparent,opacity:transparent?(op||.32):1,depthWrite:!transparent,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1}));
+ return matCache.get(k)};
+const selMat=new THREE.MeshLambertMaterial({color:0xc1121f,emissive:0x5a0008,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1});
+const ghostMat=new THREE.MeshLambertMaterial({color:0x9aa3b2,transparent:true,opacity:.09,depthWrite:false,side:THREE.DoubleSide});
+const goMat=new THREE.MeshLambertMaterial({color:0xe07b00,emissive:0x3a1d00,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1});
+const rvMat=new THREE.MeshLambertMaterial({color:0xdb2777,transparent:true,opacity:.7,side:THREE.DoubleSide});
+const tmpMat=new THREE.MeshLambertMaterial({color:0x8b5cf6,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1});
+const hlMat=new THREE.MeshLambertMaterial({color:0x2f6fd6,emissive:0x0b2a5a,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1});
+const edgeMat=new THREE.LineBasicMaterial({color:0x10131a,transparent:true,opacity:.28});
+
+/* ---------- tilstand ---------- */
+const api=new WebIFC.IfcAPI();let ready=false;
+const S={models:[],els:new Map(),guid:new Map(),storeys:[],classes:new Map(),storeyOn:new Set(),clsOn:new Set(),hidden:new Set(),iso:null,sel:new Set(),search:'',
+ offset:null,tasks:[],taskBy:new Map(),links:new Map(),active:null,hl:new Set(),collapsed:new Set(),schName:'',name:'Nytt 4D-prosjekt',t0:0,t1:0,now:0,sim:false,playing:false,pendingModels:[]};
+const val=x=>x==null?null:(typeof x==='object'?(x.value??x._representationValue??(x._internalValue!=null?Number(x._internalValue):null)):x);
+const PFX={KILO:1e3,HECTO:100,DECA:10,DECI:.1,CENTI:.01,MILLI:.001,MICRO:1e-6};
+const AREA_PRI=['NetSideArea','GrossSideArea','NetArea','GrossArea','NetFloorArea','GrossFloorArea','NetSurfaceArea','OuterSurfaceArea','GrossSurfaceArea','Area','NetFootprintArea','GrossFootprintArea'];
+const VOL_PRI=['NetVolume','GrossVolume','Volume'];const LEN_PRI=['Length','NominalLength'];
+
+/* ---------- IFC-lasting (flere modeller, felles origo) ---------- */
+async function addIFC(bytes,name){ov(null);
+ if(!ready){toast('IFC-motoren er ikke klar ennå');return}
+ if(S.models.some(m=>m.name===name)){toast(`${name} er allerede lastet`);return}
+ ov('Leser '+name+' …','');await tick();
+ const mid=api.OpenModel(bytes,{COORDINATE_TO_ORIGIN:false});
+ const M={mid,name,bytes,visible:true,count:0};S.models.push(M);
+ const line=id=>{try{return api.GetLine(mid,id)}catch{return null}};
+ const ids=t=>{const v=api.GetLineIDsWithType(mid,t);const a=[];for(let i=0;i<v.size();i++)a.push(v.get(i));return a};
+ // enheter
+ const U={L:1,A:1,V:1};
+ for(const pid of ids(WebIFC.IFCPROJECT)){const p=line(pid);const ua=p&&line(val(p.UnitsInContext));if(!ua)continue;
+  for(const r of ua.Units||[]){const un=line(val(r));if(!un)continue;const ut=val(un.UnitType);let f=un.Prefix?(PFX[val(un.Prefix)]||1):1;
+   if(un.ConversionFactor){const mw=line(val(un.ConversionFactor));const c=mw&&val(mw.ValueComponent);if(c)f=Number(c)}
+   if(ut==='LENGTHUNIT')U.L=f;else if(ut==='AREAUNIT')U.A=un.Prefix?f*f:f;else if(ut==='VOLUMEUNIT')U.V=un.Prefix?f*f*f:f}}
+ ov('Bygger geometri – '+name+' …');await tick();
+ const m4=new THREE.Matrix4(),nm=new THREE.Matrix3(),v=new THREE.Vector3(),w=new THREE.Vector3();
+ const add=fm=>{const id=fm.expressID;const n=fm.geometries.size();if(!n)return;
+  const pos=[],nor=[],col=[],idx=[];let off=0,alpha=1,vol=0;
+  for(let i=0;i<n;i++){const pg=fm.geometries.get(i);const g=api.GetGeometry(mid,pg.geometryExpressID);
+   const vd=api.GetVertexArray(g.GetVertexData(),g.GetVertexDataSize());const id2=api.GetIndexArray(g.GetIndexData(),g.GetIndexDataSize());
+   m4.fromArray(pg.flatTransformation);
+   if(!S.offset)S.offset=new THREE.Vector3(m4.elements[12],m4.elements[13],m4.elements[14]);
+   nm.getNormalMatrix(m4);const c=pg.color;alpha=Math.min(alpha,c.w);
+   for(let k=0;k<vd.length;k+=6){v.set(vd[k],vd[k+1],vd[k+2]).applyMatrix4(m4).sub(S.offset);pos.push(v.x,v.y,v.z);w.set(vd[k+3],vd[k+4],vd[k+5]).applyMatrix3(nm).normalize();nor.push(w.x,w.y,w.z);col.push(c.x,c.y,c.z)}
+   for(let k=0;k<id2.length;k++)idx.push(id2[k]+off);off+=vd.length/6;g.delete()}
+  if(!idx.length)return;
+  for(let k=0;k<idx.length;k+=3){const a=idx[k]*3,b=idx[k+1]*3,c=idx[k+2]*3;
+   vol+=(pos[a]*(pos[b+1]*pos[c+2]-pos[b+2]*pos[c+1])-pos[a+1]*(pos[b]*pos[c+2]-pos[b+2]*pos[c])+pos[a+2]*(pos[b]*pos[c+1]-pos[b+1]*pos[c]))/6}
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));geo.setAttribute('normal',new THREE.Float32BufferAttribute(nor,3));
+  geo.setAttribute('color',new THREE.Float32BufferAttribute(col,3));geo.setIndex(idx);geo.computeBoundingBox();geo.computeBoundingSphere();
+  const key=mid+':'+id;const mesh=new THREE.Mesh(geo);mesh.userData.key=key;mesh.matrixAutoUpdate=false;root.add(mesh);
+  S.els.set(key,{key,mid,id,mesh,alpha,vgeo:Math.abs(vol)})};
+ api.StreamAllMeshes(mid,add);
+ try{api.StreamAllMeshesWithTypes(mid,[WebIFC.IFCSPACE],add)}catch{}
+ ov('Leser egenskaper – '+name+' …');await tick();
+ const parent=new Map();
+ for(const rid of ids(WebIFC.IFCRELAGGREGATES)){const r=line(rid);if(!r)continue;const p=val(r.RelatingObject);for(const c of r.RelatedObjects||[])parent.set(val(c),p)}
+ for(const rid of ids(WebIFC.IFCRELCONTAINEDINSPATIALSTRUCTURE)){const r=line(rid);if(!r)continue;const p=val(r.RelatingStructure);for(const c of r.RelatedElements||[])if(!parent.has(val(c)))parent.set(val(c),p)}
+ const stName=new Map();
+ for(const id of ids(WebIFC.IFCBUILDINGSTOREY)){const l=line(id);const nmS=String(val(l.Name)||val(l.LongName)||('Etasje #'+id));stName.set(id,nmS);
+  if(!S.storeys.some(s=>s.name===nmS))S.storeys.push({name:nmS,elev:(val(l.Elevation)??0)*U.L})}
+ const storeyOf=id=>{let x=id,k=0;while(x!=null&&k++<50){if(stName.has(x))return stName.get(x);x=parent.get(x)}return '(Uten etasje)'};
+ const types=new Map();
+ for(const rid of ids(WebIFC.IFCRELDEFINESBYTYPE)){const r=line(rid);if(!r)continue;const t=line(val(r.RelatingType));const tn=t&&(val(t.Name)||null);for(const c of r.RelatedObjects||[])types.set(val(c),tn)}
+ const qcache=new Map();const pdefs=new Map();
+ const readQto=qid=>{if(qcache.has(qid))return qcache.get(qid);const q=line(qid);const out=[];
+  for(const r of q.Quantities||[]){const x=line(val(r));if(!x)continue;let vv=null,k='';
+   if(x.LengthValue!=null){vv=val(x.LengthValue)*U.L;k='L'}else if(x.AreaValue!=null){vv=val(x.AreaValue)*U.A;k='A'}
+   else if(x.VolumeValue!=null){vv=val(x.VolumeValue)*U.V;k='V'}else if(x.CountValue!=null){vv=val(x.CountValue);k='N'}else if(x.WeightValue!=null){vv=val(x.WeightValue);k='W'}
+   if(vv!=null&&isFinite(vv))out.push({set:val(q.Name)||'',name:val(x.Name),v:Number(vv),k})}
+  qcache.set(qid,out);return out};
+ for(const rid of ids(WebIFC.IFCRELDEFINESBYPROPERTIES)){const r=line(rid);if(!r)continue;const pd=val(r.RelatingPropertyDefinition);
+  let isQ=false;try{isQ=api.GetLineType(mid,pd)===WebIFC.IFCELEMENTQUANTITY}catch{}
+  for(const c of r.RelatedObjects||[]){const eid=val(c);if(!pdefs.has(eid))pdefs.set(eid,[]);pdefs.get(eid).push(pd);
+   if(isQ){const el=S.els.get(mid+':'+eid);if(el)el.q=(el.q||[]).concat(readQto(pd))}}}
+ M.pdefs=pdefs;
+ for(const el of S.els.values()){if(el.mid!==mid)continue;const l=line(el.id)||{};M.count++;
+  el.cls=api.GetNameFromTypeCode(api.GetLineType(mid,el.id));el.name=String(val(l.Name)||'');el.otype=String(val(l.ObjectType)||'');el.guid=String(val(l.GlobalId)||el.key);el.tname=types.get(el.id)||'';
+  el.storey=storeyOf(el.id);el.label=el.tname||el.otype||el.name||clsName(el.cls);el.model=name;
+  el.text=(el.name+' '+el.tname+' '+el.otype+' '+clsName(el.cls)+' '+el.storey).toLowerCase();
+  const q=el.q||[];const pick=(pri,k)=>{for(const n of pri){const f=q.find(x=>x.name===n&&x.k===k);if(f)return f.v}return null};
+  el.L=pick(LEN_PRI,'L');el.A=pick(AREA_PRI,'A');el.V=pick(VOL_PRI,'V');el.Vest=el.V==null&&el.vgeo>1e-6;
+  S.guid.set(el.guid,el.key);
+  if(!S.classes.has(el.cls)){S.classes.set(el.cls,0);if(el.cls!=='IfcSpace')S.clsOn.add(el.cls)}S.classes.set(el.cls,S.classes.get(el.cls)+1)}
+ S.storeys.sort((a,b)=>b.elev-a.elev);
+ if([...S.els.values()].some(e=>e.storey==='(Uten etasje)')&&!S.storeys.some(s=>s.name==='(Uten etasje)'))S.storeys.push({name:'(Uten etasje)',elev:-1e9});
+ for(const s of S.storeys)if(!s.seen){s.seen=1;S.storeyOn.add(s.name)}
+ S.classes=new Map([...S.classes].sort((a,b)=>clsName(a[0]).localeCompare(clsName(b[0]),'nb')));
+ buildEdges();refreshAll();
+ const first=S.models.length===1;if(first)fit(visibleMeshes());
+ ov(null);toast(`${name}: ${nf0.format(M.count)} elementer`);
+}
+function removeModel(mid){
+ for(const [k,el] of [...S.els]){if(el.mid!==mid)continue;el.mesh.geometry.dispose();root.remove(el.mesh);if(el.edges){el.edges.geometry.dispose();root.remove(el.edges)}S.els.delete(k);S.guid.delete(el.guid);S.sel.delete(k)}
+ try{api.CloseModel(mid)}catch{}S.models=S.models.filter(m=>m.mid!==mid);
+ if(!S.models.length){S.offset=null;S.storeys=[];S.classes.clear()}
+ else{const cnt=new Map();for(const e of S.els.values())cnt.set(e.cls,(cnt.get(e.cls)||0)+1);S.classes=new Map([...S.classes].filter(([c])=>cnt.has(c)).map(([c])=>[c,cnt.get(c)]))}
+ refreshAll()}
+function clearModels(){for(const m of [...S.models])removeModel(m.mid)}
+
+/* ---------- filtre og visning ---------- */
+function buildFilters(){
+ const cnt=new Map();for(const e of S.els.values())cnt.set(e.storey,(cnt.get(e.storey)||0)+1);
+ $('#modelList').className='models'+(S.models.length?'':' empty');
+ $('#modelList').innerHTML=S.models.length?S.models.map(m=>`<label class="chk"><input type="checkbox" data-model="${m.mid}" ${m.visible?'checked':''}><span>${esc(m.name)}<br><span class="n" style="margin:0">${nf0.format(m.count)} elementer</span></span><button class="x" type="button" data-rm="${m.mid}" aria-label="Fjern modell">✕</button></label>`).join('')
+  +(S.pendingModels.length?`<p class="note" style="color:var(--red)">4D-fila viser til: ${S.pendingModels.map(esc).join(', ')}. Legg til disse IFC-filene.</p>`:''):'Ingen IFC-filer lastet.';
+ $('#storeyList').className=S.storeys.length?'':'empty';$('#classList').className=S.classes.size?'':'empty';
+ $('#storeyList').innerHTML=S.storeys.map((s,i)=>`<label class="chk"><input type="checkbox" data-storey="${esc(s.name)}" ${S.storeyOn.has(s.name)?'checked':''}><span class="sw" style="background:#${stCol(i).getHexString()}"></span>${esc(s.name)}<span class="n">${nf0.format(cnt.get(s.name)||0)}</span></label>`).join('')||'—';
+ $('#classList').innerHTML=[...S.classes].map(([c,n])=>`<label class="chk" title="${c}"><input type="checkbox" data-cls="${c}" ${S.clsOn.has(c)?'checked':''}><span class="sw" style="background:#${clsColor(c).getHexString()}"></span>${esc(clsName(c))}<span class="n">${nf0.format(n)}</span></label>`).join('')||'—'}
+const modelVis=new Map();
+const isFiltered=e=>(modelVis.get(e.mid)??true)&&S.storeyOn.has(e.storey)&&S.clsOn.has(e.cls)&&!S.hidden.has(e.key)&&(!S.iso||S.iso.has(e.key))&&(!S.search||e.text.includes(S.search));
+// 4D-status for et element på tidspunkt t
+let elTasks=new Map();
+function rebuildIndex(){elTasks=new Map();for(const [uid,set] of S.links){const t=S.taskBy.get(uid);if(!t)continue;for(const g of set){const k=S.guid.get(g);if(!k)continue;if(!elTasks.has(k))elTasks.set(k,[]);elTasks.get(k).push(t)}}}
+function status(e,t){const ts=elTasks.get(e.key);if(!ts)return'unlinked';
+ let built=false,going=false,demo=false,gone=false,tmpOn=false,onlyTmp=true;
+ for(const k of ts){const ty=k.kind||'build';
+  if(ty==='temp'){if(t>=k.start&&t<k.finish)tmpOn=true;continue}
+  onlyTmp=false;
+  if(ty==='build'){if(t>=k.finish)built=true;else if(t>=k.start)going=true}
+  else if(ty==='demo'){if(t>=k.finish)gone=true;else if(t>=k.start)demo=true;else built=true}}
+ if(gone)return'gone';if(demo)return'demo';if(going)return'going';if(tmpOn)return'temp';if(onlyTmp)return'gone';if(built)return'done';return'future'}
+function render4D(){
+ const mode=$('#colorMode').value;const stIdx=new Map(S.storeys.map((s,i)=>[s.name,i]));const edges=$('#edgesChk').checked;
+ const un=$('#unlinked').value,fu=$('#future').value;const t=S.now;
+ for(const e of S.els.values()){let vis=isFiltered(e);let m;const tr=TRANSP.has(e.cls)||e.alpha<.99;
+  const base=()=>mode==='model'?mat(null,tr,true):mode==='storey'?mat(stCol(stIdx.get(e.storey)??0),tr):mode==='link'?mat(new THREE.Color(elTasks.has(e.key)?'#2f8f6a':'#c9ced6'),tr):mat(clsColor(e.cls),tr);
+  if(vis&&S.sim){const s=status(e,t);
+   if(s==='unlinked'){if(un==='hide')vis=false;else m=un==='ghost'?ghostMat:base()}
+   else if(s==='future'){if(fu==='hide')vis=false;else m=ghostMat}
+   else if(s==='gone')vis=false;else if(s==='going')m=goMat;else if(s==='demo')m=rvMat;else if(s==='temp')m=tmpMat;else m=base()}
+  else m=base();
+  if(S.hl.has(e.key)&&isFiltered(e)){vis=true;m=hlMat}
+  if(S.sel.has(e.key)){m=selMat;if(isFiltered(e))vis=true}
+  e.mesh.visible=vis;if(vis)e.mesh.material=m;e.shown=vis&&m!==ghostMat;
+  if(e.edges)e.edges.visible=vis&&edges&&m!==ghostMat}
+ needs=true}
+function updateHL(){S.hl=S.active&&S.taskBy.get(S.active)?taskKeys(S.active,!!S.taskBy.get(S.active).summary):new Set()}
+function refreshAll(){modelVis.clear();for(const m of S.models)modelVis.set(m.mid,m.visible);rebuildIndex();updateHL();buildFilters();render4D();renderGantt();renderTaskCard();renderQty()}
+const visibleMeshes=()=>[...S.els.values()].filter(e=>e.mesh.visible&&e.shown!==false).map(e=>e.mesh);
+function buildEdges(){if(!$('#edgesChk').checked)return;
+ for(const e of S.els.values()){if(e.edges||e.cls==='IfcSpace')continue;e.edges=new THREE.LineSegments(new THREE.EdgesGeometry(e.mesh.geometry,30),edgeMat);e.edges.matrixAutoUpdate=false;root.add(e.edges)}}
+$('#modelList').addEventListener('change',ev=>{const m=S.models.find(m=>m.mid===+ev.target.dataset.model);if(m){m.visible=ev.target.checked;modelVis.set(m.mid,m.visible);render4D();renderQty()}});
+$('#modelList').addEventListener('click',ev=>{const b=ev.target.closest('[data-rm]');if(!b)return;ev.preventDefault();removeModel(+b.dataset.rm);setDirty(true)});
+$('#storeyList').addEventListener('change',ev=>{const n=ev.target.dataset.storey;ev.target.checked?S.storeyOn.add(n):S.storeyOn.delete(n);render4D();renderQty()});
+$('#classList').addEventListener('change',ev=>{const c=ev.target.dataset.cls;ev.target.checked?S.clsOn.add(c):S.clsOn.delete(c);render4D();renderQty()});
+document.addEventListener('click',ev=>{const a=ev.target.closest('[data-all],[data-none]');if(!a)return;const k=a.dataset.all||a.dataset.none,on=!!a.dataset.all;
+ if(k==='storey')S.storeyOn=new Set(on?S.storeys.map(s=>s.name):[]);else S.clsOn=new Set(on?S.classes.keys():[]);buildFilters();render4D();renderQty()});
+let st_;$('#search').addEventListener('input',ev=>{clearTimeout(st_);st_=setTimeout(()=>{S.search=ev.target.value.trim().toLowerCase();render4D();renderQty()},200)});
+$('#colorMode').value=store.get('ifc4d.color','class');
+$('#colorMode').addEventListener('change',ev=>{store.set('ifc4d.color',ev.target.value);render4D()});
+$('#edgesChk').addEventListener('change',()=>{buildEdges();render4D()});
+for(const id of ['#unlinked','#future'])$(id).addEventListener('change',()=>{render4D();renderQty()});
+
+/* ---------- kamera og valg ---------- */
+function fit(meshes,dir){const b=new THREE.Box3();for(const m of meshes)b.union(m.geometry.boundingBox);if(b.isEmpty())return;const c=b.getCenter(new THREE.Vector3());const r=b.getSize(new THREE.Vector3()).length()/2||1;
+ const d=dir||camera.position.clone().sub(controls.target).normalize();
+ const dist=r/Math.sin(THREE.MathUtils.degToRad(Math.min(camera.fov,camera.fov*camera.aspect)/2))*0.82;
+ controls.target.copy(c);camera.position.copy(c).addScaledVector(d,dist);camera.near=Math.max(.05,dist/2000);camera.far=dist*20;camera.updateProjectionMatrix();controls.update();needs=true}
+const allFiltered=()=>[...S.els.values()].filter(isFiltered).map(e=>e.mesh);
+$('#fitBtn').onclick=()=>fit(S.sel.size?selMeshes():allFiltered());
+$('#topBtn').onclick=()=>fit(allFiltered(),new THREE.Vector3(0,1,0.0001).normalize());
+$('#isoBtn').onclick=()=>fit(allFiltered(),new THREE.Vector3(1,.8,1).normalize());
+const selMeshes=()=>[...S.sel].map(k=>S.els.get(k)?.mesh).filter(Boolean);
+$('#selVis').onclick=()=>{setSel([...S.els.values()].filter(e=>e.mesh.visible&&e.shown!==false).map(e=>e.key));toast(`${nf0.format(S.sel.size)} elementer valgt`)};
+$('#isoSel').onclick=()=>{if(!S.sel.size)return toast('Velg elementer først');S.iso=new Set(S.sel);render4D();renderQty();fit(selMeshes())};
+$('#hideSel').onclick=()=>{if(!S.sel.size)return toast('Velg elementer først');for(const k of S.sel)S.hidden.add(k);setSel([]);render4D();renderQty()};
+$('#showAll').onclick=()=>{S.iso=null;S.hidden.clear();render4D();renderQty()};
+const ray=new THREE.Raycaster();const ptr=new THREE.Vector2();
+function pick(ev){const r=cv.getBoundingClientRect();ptr.set(((ev.clientX-r.left)/r.width)*2-1,-((ev.clientY-r.top)/r.height)*2+1);ray.setFromCamera(ptr,camera);
+ const hits=ray.intersectObjects(visibleMeshes(),false);return hits.find(h=>!h.object.material.transparent)||hits[0]||null}
+let down=null;
+cv.addEventListener('pointerdown',ev=>{down={x:ev.clientX,y:ev.clientY}});
+cv.addEventListener('pointerup',ev=>{if(!down||Math.hypot(ev.clientX-down.x,ev.clientY-down.y)>5||ev.button!==0)return;const h=pick(ev);const add=ev.ctrlKey||ev.metaKey||ev.shiftKey;
+ if(!h){if(!add)setSel([]);return}const k=h.object.userData.key;
+ if(add){const s=new Set(S.sel);s.has(k)?s.delete(k):s.add(k);setSel([...s],true)}else{setSel([k],true);if(!elTasks.has(k)&&!S.active)showTab('props')}});
+cv.addEventListener('dblclick',ev=>{const h=pick(ev);if(h){controls.target.copy(h.point);controls.update();needs=true}});
+document.addEventListener('keydown',ev=>{if(ev.target.matches('input,select,textarea'))return;
+ if(ev.key==='Escape'){setSel([]);modal('')}if(ev.key===' '){ev.preventDefault();togglePlay()}});
+function setSel(list,fromModel){S.sel=new Set(list);render4D();renderProps();renderTaskCard();renderGantt();if($('#selOnly').checked)renderQty();
+ if(fromModel&&S.sel.size){const ts=new Set();for(const k of S.sel)for(const t of elTasks.get(k)||[])ts.add(t.uid);
+  for(const u of ts){let p=S.taskBy.get(u)?.parent;while(p){S.collapsed.delete(p);p=S.taskBy.get(p)?.parent}}if(ts.size){renderGantt();showTab('act')}
+  const r=[...document.querySelectorAll('#gantt .task.lk')].find(x=>!S.taskBy.get(x.dataset.uid)?.summary)||document.querySelector('#gantt .task.lk');if(r)r.scrollIntoView({block:'nearest',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'})}}
+
+/* ---------- fremdriftsplan: import ---------- */
+function parseDateStr(s,dmy=true){if(s==null||s==='')return null;if(s instanceof Date)return s.getTime();if(typeof s==='number')return Math.round((s-25569)*DAY+new Date().getTimezoneOffset()*6e4);
+ s=String(s).trim();let m;
+ if(m=s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{1,2}):(\d{2}))?/))return new Date(+m[1],m[2]-1,+m[3],+(m[4]||0),+(m[5]||0)).getTime();
+ if(m=s.match(/(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})(?:\s+(\d{1,2})[:.](\d{2}))?/)){let a=+m[1],b=+m[2],y=+m[3];if(y<100)y+=2000;const d=dmy?a:b,mo=dmy?b:a;return new Date(y,mo-1,d,+(m[4]||0),+(m[5]||0)).getTime()}
+ const t=Date.parse(s);return isNaN(t)?null:t}
+function parseMSPDI(txt){
+ const doc=new DOMParser().parseFromString(txt,'application/xml');if(doc.querySelector('parsererror'))throw new Error('Ugyldig XML');
+ const g=(el,n)=>{const c=[...el.children].find(x=>x.localName===n);return c?c.textContent:null};
+ const proj=doc.documentElement;const out=[];
+ for(const t of doc.getElementsByTagNameNS('*','Task')){if(t.parentElement.localName!=='Tasks')continue;
+  const uid=g(t,'UID'),name=g(t,'Name');if(uid==null||uid==='0'||g(t,'IsNull')==='1'||!name)continue;
+  out.push({uid:String(uid),id:g(t,'ID'),name,wbs:g(t,'WBS')||g(t,'OutlineNumber')||'',level:+(g(t,'OutlineLevel')||1),summary:g(t,'Summary')==='1',milestone:g(t,'Milestone')==='1',start:parseDateStr(g(t,'Start')),finish:parseDateStr(g(t,'Finish'))})}
+ return{name:g(proj,'Title')||g(proj,'Name')||'',tasks:out}}
+function tableToTasks(rows){
+ let h=-1,map={};const norm=s=>String(s??'').trim().toLowerCase();
+ const want={name:['navn','oppgavenavn','name','task name','aktivitet','beskrivelse'],start:['start','startdato','start date','begin','starttid'],finish:['slutt','sluttdato','finish','finish date','ferdig','end','slutttid'],
+  uid:['unik id','unique id','uid','unik-id'],id:['id','nr','nummer'],level:['disposisjonsnivå','outline level','nivå','level','strukturnivå'],summary:['sammendrag','summary','sammendragsoppgave'],wbs:['wbs','arbeidsnedbrytingsstruktur','disposisjonsnummer','outline number','strukturnummer'],milestone:['milepæl','milestone']};
+ for(let i=0;i<Math.min(rows.length,15);i++){const r=rows[i].map(norm);const m={};for(const[k,al]of Object.entries(want)){const j=r.findIndex(c=>al.includes(c));if(j>=0)m[k]=j}
+  if(m.name!=null&&m.start!=null&&m.finish!=null){h=i;map=m;break}}
+ if(h<0)throw new Error('Fant ikke kolonnene Navn, Start og Slutt');
+ const data=rows.slice(h+1).filter(r=>r[map.name]!=null&&String(r[map.name]).trim()!=='');
+ const strs=data.flatMap(r=>[r[map.start],r[map.finish]]).filter(x=>typeof x==='string');
+ const dmy=!strs.some(s=>{const m=s.match(/(\d{1,2})[/](\d{1,2})[/]\d{2,4}/);return m&&+m[2]>12});
+ const yes=v=>/^(ja|yes|true|1|sann)$/i.test(String(v??'').trim());
+ const tasks=data.map((r,i)=>{const lvl=map.level!=null?+r[map.level]||1:(map.wbs!=null?String(r[map.wbs]).split('.').length:1);
+  return{uid:String(map.uid!=null?r[map.uid]:map.id!=null?r[map.id]:i+1),id:map.id!=null?r[map.id]:i+1,name:String(r[map.name]).trim(),wbs:map.wbs!=null?String(r[map.wbs]??''):'',level:lvl,
+   summary:map.summary!=null?yes(r[map.summary]):false,milestone:map.milestone!=null?yes(r[map.milestone]):false,start:parseDateStr(r[map.start],dmy),finish:parseDateStr(r[map.finish],dmy)}});
+ if(map.summary==null)tasks.forEach((t,i)=>{t.summary=!!tasks[i+1]&&tasks[i+1].level>t.level});
+ return{name:'',tasks}}
+function parseCSV(txt){const first=txt.split(/\r?\n/)[0];const d=[';','\t',','].sort((a,b)=>first.split(b).length-first.split(a).length)[0];
+ const rows=[];let row=[],cur='',q=false;for(let i=0;i<txt.length;i++){const c=txt[i];
+  if(q){if(c==='"'&&txt[i+1]==='"'){cur+='"';i++}else if(c==='"')q=false;else cur+=c}
+  else if(c==='"')q=true;else if(c===d){row.push(cur);cur=''}else if(c==='\n'||c==='\r'){if(c==='\r'&&txt[i+1]==='\n')i++;row.push(cur);rows.push(row);row=[];cur=''}else cur+=c}
+ if(cur||row.length){row.push(cur);rows.push(row)}return rows}
+let xlsxLib=null;
+const loadXLSX=()=>xlsxLib||(xlsxLib=new Promise((res,rej)=>{const s=document.createElement('script');s.src='vendor/xlsx/xlsx.full.min.js';s.onload=()=>res(window.XLSX);s.onerror=()=>rej(new Error('Kunne ikke laste Excel-leseren'));document.head.appendChild(s)}));
+async function importSchedule(file){
+ const n=file.name.toLowerCase();let res;
+ try{
+  if(n.endsWith('.mpp'))throw new Error('.mpp er MS Projects lukkede format. Åpne planen i MS Project og velg Fil › Lagre som › XML-format (*.xml), og importer den fila.');
+  if(n.endsWith('.xml'))res=parseMSPDI(await file.text());
+  else if(n.endsWith('.xlsx')||n.endsWith('.xls')){const X=await loadXLSX();const wb=X.read(new Uint8Array(await file.arrayBuffer()),{type:'array',cellDates:true});
+   const ws=wb.Sheets[wb.SheetNames[0]];res=tableToTasks(X.utils.sheet_to_json(ws,{header:1,raw:true,defval:null}))}
+  else{let txt=await file.text();res=tableToTasks(parseCSV(txt))}
+ }catch(e){modal(`<h3>Kunne ikke lese fremdriftsplanen</h3><p>${esc(e.message||e)}</p><p class="note">Støttet: MS Project XML (anbefalt), Excel (.xlsx) og CSV med kolonnene Navn, Start og Slutt (gjerne også Unik ID og Disposisjonsnivå).</p><p style="text-align:right"><button data-close type="button">Lukk</button></p>`);return}
+ setSchedule(res.tasks,file.name,true);if(res.name&&S.name==='Nytt 4D-prosjekt')setName(res.name)}
+function setSchedule(tasks,src,keepLinks){
+ tasks=tasks.filter(t=>t.start!=null&&t.finish!=null);
+ const old=S.taskBy;const byName=new Map([...old.values()].map(t=>[t.name,t]));
+ // behold koblinger og aktivitetstype ved ny import: match på UID med samme navn, ellers UID, ellers navn
+ const kept=new Map(),used=new Set();
+ const newNames=new Set(tasks.map(t=>t.name));
+ for(const t of tasks){const ou=old.get(t.uid);const o=(ou&&ou.name===t.name)?ou:(byName.get(t.name)||(ou&&!newNames.has(ou.name)?ou:null));
+  if(o){t.kind=t.kind||o.kind;if(keepLinks&&S.links.has(o.uid)){kept.set(t.uid,S.links.get(o.uid));used.add(o.uid)}}t.kind=t.kind||'build'}
+ if(keepLinks){const lost=[...S.links.keys()].filter(u=>!used.has(u)&&S.links.get(u).size);S.links=kept;if(lost.length)setTimeout(()=>toast(`${lost.length} aktiviteter med koblinger finnes ikke i den nye planen`),2700)}
+ S.tasks=tasks;S.taskBy=new Map(tasks.map(t=>[t.uid,t]));S.schName=src;
+ tasks.forEach((t,i)=>{t.idx=i;t.parent=null;for(let j=i-1;j>=0;j--)if(tasks[j].level<t.level){t.parent=tasks[j].uid;break}});
+ S.t0=Math.min(...tasks.map(t=>t.start));S.t1=Math.max(...tasks.map(t=>t.finish));
+ const sl=$('#slider');sl.max=Math.max(1,Math.ceil((S.t1-S.t0)/DAY));if(!S.now||S.now<S.t0||S.now>S.t1)S.now=S.t0;sl.value=Math.round((S.now-S.t0)/DAY);
+ S.active=null;refreshAll();updateDate();toast(`${tasks.length} aktiviteter importert fra ${src}`);if(keepLinks)setDirty(true)}
+
+/* ---------- gantt ---------- */
+const pct=t=>S.t1>S.t0?((t-S.t0)/(S.t1-S.t0)*100):0;
+function taskVisible(t){let p=t.parent;while(p){if(S.collapsed.has(p))return false;p=S.taskBy.get(p)?.parent}return true}
+function linkCount(uid){const s=S.links.get(uid);if(!s)return 0;let n=0;for(const g of s)if(S.guid.has(g))n++;return n}
+function renderGantt(){
+ const box=$('#gantt');if(!S.tasks.length){box.className='gantt empty';box.innerHTML='Importer en fremdriftsplan (MS Project: Lagre som → XML, eller Excel/CSV).';return}
+ box.className='gantt';const q=$('#taskSearch').value.trim().toLowerCase();
+ const lk=new Set();for(const k of S.sel)for(const t of elTasks.get(k)||[]){lk.add(t.uid);let p=t.parent;while(p){lk.add(p);p=S.taskBy.get(p)?.parent}}
+ const ticks=[];if(S.t1>S.t0){const d=new Date(S.t0);d.setDate(1);const months=(S.t1-S.t0)/DAY/30.4;const tw=(box.clientWidth||400)*0.44;const maxL=Math.max(2,Math.floor(tw/56));const step=[1,2,3,4,6,12,24].find(x=>months/x<=maxL)||24;
+  while(d.getTime()<=S.t1){if(d.getTime()>=S.t0)ticks.push(`<span style="left:${pct(d.getTime())}%">${dMon.format(d)}</span>`);d.setMonth(d.getMonth()+step)}}
+ const rows=S.tasks.filter(t=>q?t.name.toLowerCase().includes(q):taskVisible(t)).map(t=>{
+  const n=linkCount(t.uid);const L=pct(t.start),W=Math.max(.4,pct(t.finish)-L);
+  const car=t.summary?`<span class="car" data-col="${esc(t.uid)}">${S.collapsed.has(t.uid)?'▸':'▾'}</span>`:'<span class="car"></span>';
+  const bc=t.milestone?'bar ms':'bar'+(t.kind==='demo'?' rv':t.kind==='temp'?' tmp':'');
+  return `<div class="task${t.summary?' sum':''}${S.active===t.uid?' on':''}${lk.has(t.uid)?' lk':''}" data-uid="${esc(t.uid)}" title="${esc(t.name)}: ${fd(t.start)} – ${fd(t.finish)}"><div class="nm" style="padding-left:${(Math.max(1,t.level)-1)*12}px">${car}<span class="t">${esc(t.name)}</span><span class="cnt${n?' l':''}">${n?nf0.format(n):''}</span></div><div class="track"><div class="${bc}" style="left:${L}%;width:${W}%"></div></div></div>`}).join('');
+ box.innerHTML=`<div class="scale"><span>${esc(S.schName)} · ${S.tasks.length} aktiviteter</span><div class="ticks">${ticks.join('')}</div></div>${rows||'<p class="empty">Ingen treff.</p>'}`;
+ box.style.setProperty('--now',pct(S.now)+'%')}
+$('#gantt').addEventListener('click',ev=>{const c=ev.target.closest('[data-col]');if(c){ev.stopPropagation();const u=c.dataset.col;S.collapsed.has(u)?S.collapsed.delete(u):S.collapsed.add(u);renderGantt();return}
+ const r=ev.target.closest('.task');if(!r)return;S.active=S.active===r.dataset.uid?null:r.dataset.uid;updateHL();render4D();renderGantt();renderTaskCard();if($('#groupBy').value==='task')renderQty();
+ if(S.hl.size)toast(`${nf0.format(S.hl.size)} koblede elementer uthevet i blått`)});
+$('#gantt').addEventListener('dblclick',ev=>{const r=ev.target.closest('.task');if(!r)return;const t=S.taskBy.get(r.dataset.uid);setDate(t.finish)});
+$('#taskSearch').addEventListener('input',renderGantt);
+function descendants(uid){const out=[uid];const t=S.taskBy.get(uid);if(!t)return out;for(let i=t.idx+1;i<S.tasks.length&&S.tasks[i].level>t.level;i++)out.push(S.tasks[i].uid);return out}
+function taskKeys(uid,deep){const out=new Set();for(const u of deep?descendants(uid):[uid])for(const g of S.links.get(u)||[]){const k=S.guid.get(g);if(k)out.add(k)}return out}
+function renderTaskCard(){
+ const box=$('#taskCard');const t=S.active&&S.taskBy.get(S.active);if(!t){box.innerHTML=S.tasks.length?'<p class="note" style="margin-top:0">Klikk en aktivitet for å se koblede elementer (blått) og koble nye. Klikk et element for å se hvilke aktiviteter det tilhører (rød markering). Velg elementer i modellen (klikk, Ctrl+klikk, eller filtrer og «Velg synlige») og trykk «Koble valgte».</p>':'';return}
+ const own=taskKeys(t.uid,false),deep=t.summary?taskKeys(t.uid,true):own;const r=sum([...deep]);const ns=S.sel.size;
+ box.innerHTML=`<div class="card"><h3>${esc(t.name)}</h3><div class="meta">${esc(t.wbs?t.wbs+' · ':'')}${fd(t.start)} – ${fd(t.finish)} · ${Math.max(1,Math.round((t.finish-t.start)/DAY))} dager${t.summary?' · sammendrag':''}</div>
+ <div class="row"><label>Type <select id="kindSel"><option value="build">Bygges</option><option value="demo">Rives</option><option value="temp">Midlertidig</option></select></label>
+ <span>${nf0.format(own.size)} koblet${t.summary?` (${nf0.format(deep.size)} med underaktiviteter)`:''}</span></div>
+ <div class="row"><button class="pri" id="linkBtn" type="button" ${ns?'':'disabled'}>Koble valgte (${nf0.format(ns)})</button><button id="unlinkBtn" type="button" ${ns?'':'disabled'}>Fjern valgte</button>
+ <button id="showLinked" type="button" ${deep.size?'':'disabled'}>Vis koblede</button><button id="suggestBtn" type="button">Foreslå</button><button id="clearLinks" type="button" ${own.size?'':'disabled'}>Fjern alle</button></div>
+ ${deep.size?`<dl style="margin:0"><dt>Volum</dt><dd>${fmt(r.V,nf2)} m³${r.est?' <span class="est">(delvis beregnet)</span>':''}</dd>${r.mixed?'':`<dt>Areal</dt><dd>${fmt(r.A,nf1)} m²</dd><dt>Lengde</dt><dd>${fmt(r.L,nf1)} m</dd>`}</dl>`:''}</div>`;
+ $('#kindSel').value=t.kind||'build';
+ $('#kindSel').onchange=ev=>{t.kind=ev.target.value;rebuildIndex();render4D();renderGantt();setDirty(true)};
+ $('#linkBtn').onclick=()=>{const s=S.links.get(t.uid)||new Set();for(const k of S.sel)s.add(S.els.get(k).guid);S.links.set(t.uid,s);const n=S.sel.size;setSel([]);refreshAll();toast(`${n} elementer koblet til «${t.name}»`)};setDirty(true);
+ $('#unlinkBtn').onclick=()=>{const s=S.links.get(t.uid);if(s)for(const k of S.sel)s.delete(S.els.get(k).guid);refreshAll();setDirty(true)};
+ $('#showLinked').onclick=()=>{setSel([...deep]);fit(selMeshes())};
+ $('#clearLinks').onclick=()=>{S.links.delete(t.uid);refreshAll();setDirty(true)};
+ $('#suggestBtn').onclick=()=>{const k=suggest(t,false);if(!k.length)return toast('Fant ingen etasje/elementtype i navnet');setSel(k);fit(selMeshes());toast(`${k.length} forslag valgt – trykk «Koble valgte» for å bekrefte`)}}
+
+/* ---------- autokobling ---------- */
+function storeyTokens(name){const n=name.toLowerCase();const out=new Set([n]);let m;
+ if(m=n.match(/\b(u\d+|k\d+)\b/))out.add(m[1]);if(m=n.match(/(?:plan|etasje|etg\.?)\s*(\d+)/))out.add('plan '+(+m[1]));if(m=n.match(/^0?(\d+)\s*-/))out.add('plan '+(+m[1]));if(m=n.match(/^(\d+)\.?\s*(etasje|etg)/))out.add('plan '+(+m[1]));return out}
+function textTokens(txt){const n=txt.toLowerCase();const out=new Set();let m;const re=/\b(u\d+|k\d+)\b/g;while(m=re.exec(n))out.add(m[1]);
+ const r2=/(?:plan|etasje|etg\.?)\s*(\d+)/g;while(m=r2.exec(n))out.add('plan '+(+m[1]));const r3=/(\d+)\.\s*(?:etasje|etg)/g;while(m=r3.exec(n))out.add('plan '+(+m[1]));return out}
+function suggest(t,onlyFree){
+ let path=t.name;let p=t.parent;while(p){const pt=S.taskBy.get(p);if(!pt)break;path=pt.name+' '+path;p=pt.parent}
+ const low=t.name.toLowerCase(),plow=path.toLowerCase();
+ const cls=new Set();for(const[re,cs]of KEYS)if(re.test(low))cs.forEach(c=>cls.add(c));if(!cls.size)for(const[re,cs]of KEYS)if(re.test(plow))cs.forEach(c=>cls.add(c));
+ if(!cls.size)return[];
+ const want=textTokens(t.name);const wantP=want.size?want:textTokens(path);
+ const stOK=new Set(S.storeys.filter(s=>!wantP.size||[...storeyTokens(s.name)].some(x=>wantP.has(x))).map(s=>s.name));
+ if(wantP.size&&!stOK.size)return[];
+ return[...S.els.values()].filter(e=>cls.has(e.cls)&&stOK.has(e.storey)&&(!onlyFree||!elTasks.has(e.key))).map(e=>e.key)}
+$('#autoBtn').onclick=()=>{if(!S.tasks.length||!S.els.size)return toast('Last inn modell og fremdriftsplan først');
+ const prop=[];const taken=new Set(elTasks.keys());
+ for(const t of [...S.tasks].filter(t=>!t.summary).sort((a,b)=>a.start-b.start)){const k=suggest(t,true).filter(x=>!taken.has(x));if(k.length){prop.push([t,k]);k.forEach(x=>taken.add(x))}}
+ if(!prop.length)return toast('Fant ingen aktiviteter der navnet peker på etasje og elementtype');
+ const total=prop.reduce((a,[,k])=>a+k.length,0);
+ modal(`<h3>Autokobling – forslag</h3><p>${nf0.format(total)} ukoblede elementer kan kobles til ${prop.length} aktiviteter ut fra etasje og elementtype i aktivitetsnavnet. Eksisterende koblinger beholdes.</p>
+ <table><thead><tr><th>Aktivitet</th><th class="r">Elementer</th></tr></thead><tbody>${prop.map(([t,k])=>`<tr><td>${esc(t.name)}</td><td class="r">${nf0.format(k.length)}</td></tr>`).join('')}</tbody></table>
+ <p style="text-align:right;margin-bottom:0"><button data-close type="button">Avbryt</button> <button class="pri" id="autoOk" type="button">Koble</button></p>`);
+ $('#autoOk').onclick=()=>{for(const[t,k]of prop){const s=S.links.get(t.uid)||new Set();k.forEach(x=>s.add(S.els.get(x).guid));S.links.set(t.uid,s)}modal('');refreshAll();toast(`${nf0.format(total)} elementer koblet`);setDirty(true)}};
+
+/* ---------- tidslinje ---------- */
+function updateDate(){const has=S.tasks.length>0;$('#nowTxt').textContent=has?fd(S.now):'–';$('#dateBig').hidden=!(has&&S.sim);
+ if(has&&S.sim){$('#dateTxt').textContent=dLong.format(new Date(S.now));const act=S.tasks.filter(t=>!t.summary&&S.now>=t.start&&S.now<t.finish);
+  $('#actTxt').innerHTML=act.length?'Pågår: '+act.slice(0,4).map(t=>`<b>${esc(t.name)}</b>`).join(', ')+(act.length>4?` og ${act.length-4} til`:''):'Ingen aktiviteter pågår'}
+ $('#gantt').style.setProperty('--now',pct(S.now)+'%')}
+function setDate(t){S.now=Math.min(S.t1,Math.max(S.t0,t));$('#slider').value=Math.round((S.now-S.t0)/DAY);if(!S.sim){S.sim=true;$('#simChk').checked=true}render4D();updateDate();renderQtyLazy()}
+let qT;const renderQtyLazy=()=>{clearTimeout(qT);qT=setTimeout(renderQty,250)};
+$('#slider').addEventListener('input',ev=>setDate(S.t0+(+ev.target.value)*DAY));
+$('#simChk').addEventListener('change',ev=>{S.sim=ev.target.checked;render4D();updateDate();renderQty()});
+let last=0;
+function togglePlay(){if(!S.tasks.length)return toast('Importer en fremdriftsplan først');S.playing=!S.playing;$('#playBtn').textContent=S.playing?'❚❚':'▶';$('#playBtn').setAttribute('aria-label',S.playing?'Pause':'Spill av');
+ if(S.playing){if(S.now>=S.t1)S.now=S.t0;S.sim=true;$('#simChk').checked=true;last=performance.now()}}
+$('#playBtn').onclick=togglePlay;
+(function loop(now){requestAnimationFrame(loop);
+ if(S.playing){const dt=(now-last)/1000;if(dt>0.05){last=now;const nt=S.now+dt*(+$('#speed').value)*DAY;if(nt>=S.t1){setDate(S.t1);togglePlay()}else setDate(nt)}}
+ if(controls.update())needs=true;if(needs){renderer.render(scene,camera);needs=false}})(0);
+
+/* ---------- mengder ---------- */
+let groups=[];
+function scopeEls(){const sel=$('#selOnly').checked;return[...S.els.values()].filter(e=>sel?S.sel.has(e.key):(e.mesh.visible&&e.shown!==false))}
+function sum(list){const r={n:0,L:0,A:0,V:0,hasL:0,hasA:0,hasV:0,est:0,cls:new Set()};
+ for(const k of list){const e=S.els.get(k);if(!e)continue;r.n++;r.cls.add(e.cls);if(e.L!=null){r.L+=e.L;r.hasL++}if(e.A!=null){r.A+=e.A;r.hasA++}if(e.V!=null){r.V+=e.V;r.hasV++}else if(e.Vest){r.V+=e.vgeo;r.est++}}
+ r.mixed=r.cls.size>1;r.L=r.hasL&&!r.mixed?r.L:null;r.A=r.hasA&&!r.mixed?r.A:null;r.V=(r.hasV||r.est)?r.V:null;return r}
+const fmt=(v,f)=>v==null?'–':f.format(v);
+function renderQty(){
+ const box=$('#qtyTable');if(!S.els.size){box.className='empty';box.textContent='Ingen modell lastet.';return}
+ const mode=$('#groupBy').value;const map=new Map();
+ const els=scopeEls();
+ if(mode==='task'){
+  for(const e of els){const ts=elTasks.get(e.key);const t=ts?ts[0]:null;const a=t?String(t.idx).padStart(6,'0'):'zzz';
+   if(!map.has(a))map.set(a,{label:t?t.name:'(Ikke koblet)',ids:[],sub:new Map(),t});const g=map.get(a);g.ids.push(e.key);
+   const b=clsName(e.cls);if(!g.sub.has(b))g.sub.set(b,[]);g.sub.get(b).push(e.key)}}
+ else{const stOrd=new Map(S.storeys.map((s,i)=>[s.name,i]));
+  for(const e of els){const a=mode==='storey-cls'?'s'+String(stOrd.get(e.storey)).padStart(4,'0'):clsName(e.cls)+'|'+e.cls;const lab=mode==='storey-cls'?e.storey:clsName(e.cls);
+   if(!map.has(a))map.set(a,{label:lab,ids:[],sub:new Map()});const g=map.get(a);g.ids.push(e.key);const b=mode==='storey-cls'?clsName(e.cls):e.label;if(!g.sub.has(b))g.sub.set(b,[]);g.sub.get(b).push(e.key)}}
+ groups=[];const rows=[];const T=sum(els.map(e=>e.key));
+ for(const k of [...map.keys()].sort((a,b)=>a.localeCompare(b,'nb'))){const g=map.get(k);const gi=groups.push(g.ids)-1;rows.push(rowHtml(g.label,sum(g.ids),gi,'g'));
+  for(const sk of [...g.sub.keys()].sort((a,b)=>a.localeCompare(b,'nb',{numeric:true}))){const si=groups.push(g.sub.get(sk))-1;rows.push(rowHtml(sk,sum(g.sub.get(sk)),si,'it'))}}
+ box.className='';
+ box.innerHTML=rows.length?`<table><thead><tr><th>Gruppe</th><th class="r">Antall</th><th class="r">Lengde m</th><th class="r">Areal m²</th><th class="r">Volum m³</th></tr></thead><tbody>${rows.join('')}<tr class="tot"><td>Sum${S.sim?' per '+fd(S.now):''}</td><td class="r">${nf0.format(T.n)}</td><td class="r">${fmt(T.L,nf1)}</td><td class="r">${fmt(T.A,nf1)}</td><td class="r">${fmt(T.V,nf2)}</td></tr></tbody></table>`:'<p class="empty">Ingen elementer i utvalget.</p>'}
+function rowHtml(label,r,gi,cls){const vc=r.est&&!r.hasV?'est':'';
+ return `<tr class="${cls==='g'?'g it':'it'}" data-g="${gi}"><td>${cls==='g'?'':'<span style="padding-left:12px"></span>'}${esc(label)}</td><td class="r">${nf0.format(r.n)}</td><td class="r">${fmt(r.L,nf1)}</td><td class="r">${fmt(r.A,nf1)}</td><td class="r ${vc}">${fmt(r.V,nf2)}</td></tr>`}
+$('#qtyTable').addEventListener('click',ev=>{const tr=ev.target.closest('tr[data-g]');if(!tr)return;setSel(groups[+tr.dataset.g]);fit(selMeshes())});
+$('#groupBy').addEventListener('change',renderQty);$('#selOnly').addEventListener('change',renderQty);
+$('#copyBtn').addEventListener('click',async()=>{const txt=[...document.querySelectorAll('#qtyTable tr')].map(tr=>[...tr.cells].map(td=>td.textContent.replace(/ | /g,'').trim()).join('\t')).join('\n');
+ if(!txt)return toast('Ingen tabell å kopiere');try{await navigator.clipboard.writeText(txt);toast('Kopiert – lim inn i Excel')}catch{modal(`<h3>Kopier tabellen</h3><p>Merk teksten (Ctrl+A, Ctrl+C) og lim inn i Excel.</p><textarea id="cpT">${esc(txt)}</textarea><p style="text-align:right;margin-bottom:0"><button data-close type="button">Lukk</button></p>`);$('#cpT').select()}});
+
+/* ---------- egenskaper ---------- */
+const shown=v=>{if(v==null)return'';if(Array.isArray(v))return v.map(shown).join(', ');const x=val(v);return typeof x==='number'?(Math.abs(x)<1e7?+x.toFixed(4):x):String(x)};
+function renderProps(){const box=$('#props');
+ if(!S.sel.size){box.className='empty';box.textContent='Klikk et element i modellen.';return}
+ if(S.sel.size>1){const r=sum([...S.sel]);box.className='';box.innerHTML=`<p><b>${nf0.format(S.sel.size)} elementer valgt</b></p><dl><dt>Volum</dt><dd>${fmt(r.V,nf2)} m³</dd>${r.mixed?'':`<dt>Areal</dt><dd>${fmt(r.A,nf1)} m²</dd><dt>Lengde</dt><dd>${fmt(r.L,nf1)} m</dd>`}</dl>`;return}
+ const e=S.els.get([...S.sel][0]);const M=S.models.find(m=>m.mid===e.mid);const ts=elTasks.get(e.key)||[];
+ const line=id=>{try{return api.GetLine(e.mid,id)}catch{return null}};const U={L:'m',A:'m²',V:'m³',N:'stk',W:'kg'};
+ const q=(e.q||[]).map(x=>`<dt>${esc(x.name)}</dt><dd>${(x.k==='V'?nf2:nf1).format(x.v)} ${U[x.k]||''}</dd>`).join('');
+ const ps=(M.pdefs.get(e.id)||[]).map(pid=>{const p=line(pid);if(!p||!p.HasProperties)return'';const rows=p.HasProperties.map(r=>{const x=line(val(r));if(!x)return'';const v=x.NominalValue!=null?shown(x.NominalValue):x.EnumerationValues?shown(x.EnumerationValues):'';return`<dt>${esc(val(x.Name))}</dt><dd>${esc(v)}</dd>`}).join('');return rows?`<details><summary>${esc(val(p.Name))}</summary><dl>${rows}</dl></details>`:''}).join('');
+ box.className='';box.innerHTML=`<p style="margin:0 0 8px;font-size:17px;font-weight:600">${esc(e.name||clsName(e.cls))}</p>
+ <dl><dt>Elementtype</dt><dd>${esc(clsName(e.cls))} (${esc(e.cls)})</dd><dt>Type</dt><dd>${esc(e.tname||e.otype||'–')}</dd><dt>Etasje</dt><dd>${esc(e.storey)}</dd><dt>Modell</dt><dd>${esc(e.model)}</dd><dt>GlobalId</dt><dd>${esc(e.guid)}</dd>
+ <dt>Aktivitet</dt><dd>${ts.length?ts.map(t=>`${esc(t.name)} (${fd(t.start)}–${fd(t.finish)})`).join('<br>'):'Ikke koblet'}</dd></dl>
+ ${q?`<details open><summary>Mengder</summary><dl>${q}</dl></details>`:''}${ps}`}
+function showTab(t){for(const b of document.querySelectorAll('.tabs button'))b.setAttribute('aria-selected',b.dataset.tab===t);for(const p of ['act','qty','props'])$('#pane-'+p).hidden=p!==t}
+document.querySelector('.tabs').addEventListener('click',ev=>{const b=ev.target.closest('button[data-tab]');if(b)showTab(b.dataset.tab)});
+
+/* ---------- lagre / åpne 4D-fil ---------- */
+let fileHandle=null,dirty=false;
+const setDirty=v=>{dirty=v;$('#dirty').hidden=!v};
+window.addEventListener('beforeunload',ev=>{if(dirty){ev.preventDefault();ev.returnValue=''}});
+document.addEventListener('keydown',ev=>{if((ev.ctrlKey||ev.metaKey)&&ev.key.toLowerCase()==='s'){ev.preventDefault();doSave(false)}});
+const setName=n=>{S.name=n;$('#projName').textContent=n;$('#projName').title=n};
+$('#projName').addEventListener('click',()=>{modal(`<h3>Navn på 4D-prosjektet</h3><input id="nmIn" value="${esc(S.name)}" style="width:100%;min-height:40px;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);font-size:16px"><p style="text-align:right;margin-bottom:0"><button data-close type="button">Avbryt</button> <button class="pri" id="nmOk" type="button">OK</button></p>`);$('#nmOk').onclick=()=>{setName($('#nmIn').value.trim()||'4D-prosjekt');setDirty(true);modal('')}});
+$('#projName').style.cursor='pointer';
+const canFS='showSaveFilePicker' in window;
+const PICK={types:[{description:'4D-prosjekt',accept:{'application/json':['.json']}}]};
+async function buildData(emb){
+ const data={format:'ifc-4d',version:1,name:S.name,saved:new Date().toISOString(),
+  schedule:{source:S.schName,tasks:S.tasks.map(({uid,id,name,wbs,level,summary,milestone,start,finish,kind})=>({uid,id,name,wbs,level,summary,milestone,start:new Date(start).toISOString(),finish:new Date(finish).toISOString(),kind}))},
+  links:Object.fromEntries([...S.links].filter(([,s])=>s.size).map(([u,s])=>[u,[...s]])),
+  settings:{now:S.now?new Date(S.now).toISOString():null,unlinked:$('#unlinked').value,future:$('#future').value,color:$('#colorMode').value,speed:$('#speed').value,embed:emb},
+  models:[]};
+ for(const m of S.models)data.models.push(emb?{name:m.name,size:m.bytes.length,gz:b64enc(await gzip(m.bytes))}:{name:m.name,size:m.bytes.length});
+ return new Blob([JSON.stringify(data)],{type:'application/json'})}
+let embedPref=true;
+const defName=()=>(S.name.replace(/[\\/:*?"<>|]+/g,'').trim()||'4D-prosjekt')+'.4d.json';
+async function writeOut(handle){ov('Lagrer …','');await tick();
+ try{const blob=await buildData(embedPref);
+  if(handle){const w=await handle.createWritable();await w.write(blob);await w.close();fileHandle=handle;$('#projName').title='Lagret i '+handle.name;toast('Lagret i '+handle.name)}
+  else{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=defName();document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),5000);toast('Lastet ned '+defName()+' (nettleseren støtter ikke direkte lagring)')}
+  setDirty(false)}catch(e){toast('Feil ved lagring: '+(e.message||e))}finally{ov(null)}}
+async function doSave(asNew){
+ if(!S.tasks.length&&!S.models.length)return toast('Ingenting å lagre ennå');if(S.playing)togglePlay();
+ if(!asNew&&fileHandle)return writeOut(fileHandle);
+ const mb=S.models.reduce((a,m)=>a+m.bytes.length,0)/1e6;
+ modal(`<h3>Lagre 4D-fil</h3><p>Fila lagres på din PC og inneholder fremdriftsplanen, aktivitetstyper og alle koblinger (${nf0.format([...S.links.values()].reduce((a,s)=>a+s.size,0))} elementkoblinger, lagret på GlobalId). Ingenting sendes noe sted.</p>
+ <label class="chk"><input type="checkbox" id="embedChk" ${embedPref&&mb<150?'checked':''}> Ta med IFC-filene i 4D-fila (${nf1.format(mb)} MB før komprimering)</label>
+ <p class="note">Med IFC-filene åpnes alt med én fil. Uten dem blir fila liten, men du må legge til de samme IFC-filene etter at du har åpnet den. Koblingene finner elementene via GlobalId, også i nye eksporter av samme modell.</p>
+ <p style="text-align:right;margin-bottom:0"><button data-close type="button">Avbryt</button> <button class="pri" id="saveOk" type="button">${canFS?'Velg plassering …':'Last ned'}</button></p>`);
+ $('#saveOk').onclick=async()=>{embedPref=$('#embedChk').checked;modal('');
+  if(canFS){let h;try{h=await window.showSaveFilePicker({...PICK,suggestedName:defName()})}catch(e){if(e.name!=='AbortError')toast('Kunne ikke åpne lagringsdialogen: '+e.message);return}await writeOut(h)}
+  else await writeOut(null)}}
+$('#saveBtn').onclick=()=>doSave(false);$('#saveAsBtn').onclick=()=>doSave(true);
+async function openProject(obj){
+ if(obj.format!=='ifc-4d')throw new Error('Dette er ikke en 4D-fil fra denne appen');
+ S.playing=false;$('#playBtn').textContent='▶';
+ const emb=(obj.models||[]).filter(m=>m.gz);
+ if(emb.length)clearModels();
+ for(const m of emb)await addIFC(await gunzip(b64dec(m.gz)),m.name);
+ S.links=new Map(Object.entries(obj.links||{}).map(([u,a])=>[u,new Set(a)]));S.taskBy=new Map();
+ const tasks=(obj.schedule?.tasks||[]).map(t=>({...t,start:Date.parse(t.start),finish:Date.parse(t.finish)}));
+ const st=obj.settings||{};for(const[k,id]of [['unlinked','#unlinked'],['future','#future'],['color','#colorMode'],['speed','#speed']])if(st[k])$(id).value=st[k];
+ S.now=st.now?Date.parse(st.now):0;
+ const links=S.links;setSchedule(tasks,obj.schedule?.source||'',false);S.links=links;
+ setName(obj.name||'4D-prosjekt');
+ const have=new Set(S.models.map(m=>m.name));S.pendingModels=(obj.models||[]).filter(m=>!m.gz&&!have.has(m.name)).map(m=>m.name);
+ S.sim=true;$('#simChk').checked=true;refreshAll();updateDate();
+ if(S.pendingModels.length)toast('Legg til IFC-filene: '+S.pendingModels.join(', '))}
+async function openFile(f,handle){if(dirty&&!(await askDiscard()))return;
+ try{ov('Åpner '+f.name+' …','');await tick();await openProject(JSON.parse(await f.text()));fileHandle=handle||null;setDirty(false);ov(null);toast('Åpnet '+f.name)}catch(e){ov(null);modal(`<h3>Kunne ikke åpne fila</h3><p>${esc(e.message||e)}</p><p style="text-align:right"><button data-close type="button">Lukk</button></p>`)}}
+function askDiscard(){return new Promise(res=>{modal(`<h3>Ulagrede endringer</h3><p>Du har endringer som ikke er lagret. Vil du forkaste dem?</p><p style="text-align:right;margin-bottom:0"><button type="button" id="dNo">Avbryt</button> <button class="pri" type="button" id="dYes">Forkast og fortsett</button></p>`);
+ $('#dNo').onclick=()=>{modal('');res(false)};$('#dYes').onclick=()=>{modal('');res(true)}})}
+$('#prjInp').addEventListener('change',ev=>{const f=ev.target.files[0];ev.target.value='';if(f)openFile(f,null)});
+$('#openBtn').onclick=async()=>{if('showOpenFilePicker' in window){let h;try{[h]=await window.showOpenFilePicker(PICK)}catch(e){return}openFile(await h.getFile(),h)}else $('#prjInp').click()};
+
+/* ---------- filer inn ---------- */
+async function addFiles(files){for(const f of files){const n=f.name.toLowerCase();
+ if(n.endsWith('.ifc')){await addIFC(new Uint8Array(await f.arrayBuffer()),f.name);S.pendingModels=S.pendingModels.filter(x=>x!==f.name);refreshAll();setDirty(true)}
+ else if(n.endsWith('.json'))await openFile(f,null);
+ else if(/\.(xml|xlsx|xls|csv|txt|mpp)$/.test(n))await importSchedule(f);else toast('Ukjent filtype: '+f.name)}}
+$('#ifcInp').addEventListener('change',ev=>{const fs=[...ev.target.files];ev.target.value='';addFiles(fs)});
+$('#schInp').addEventListener('change',ev=>{const f=ev.target.files[0];ev.target.value='';if(f)importSchedule(f)});
+viewer.addEventListener('dragover',ev=>{ev.preventDefault();viewer.classList.add('drop')});
+viewer.addEventListener('dragleave',()=>viewer.classList.remove('drop'));
+document.addEventListener('dragover',ev=>ev.preventDefault());
+document.addEventListener('drop',ev=>{ev.preventDefault();viewer.classList.remove('drop');const fs=[...(ev.dataTransfer?.files||[])];if(fs.length)addFiles(fs)});
+
+async function loadSample(){const r=await fetch('samples/eksempel.4d.json');const f=new File([await r.blob()],'eksempel.4d.json');await openFile(f,null)}
+$('#sampleBtn').onclick=()=>loadSample();
+
+/* ---------- start ---------- */
+(async()=>{
+ try{await api.Init(p=>'vendor/web-ifc/'+p,true);ready=true}
+ catch(e){console.error(e);ov('IFC-motoren kunne ikke starte','Nettleseren blokkerte WebAssembly. Prøv en oppdatert Chrome, Edge eller Firefox. ('+(e&&e.message||e)+')');return}
+ ov('Kom i gang','Legg til én eller flere IFC-filer og importer en fremdriftsplan (MS Project: Fil › Lagre som › XML). Har du lagret en 4D-fil tidligere, åpner du den med «Åpne 4D-fil». Alle filer leses lokalt i nettleseren din.');
+ try{const r=await fetch('samples/eksempel.4d.json',{method:'HEAD'});if(r.ok)$('#sampleBtn').hidden=false}catch{}
+})();
+}
+</script>
+</body>
+</html>

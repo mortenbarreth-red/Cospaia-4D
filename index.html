@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Cpath d=%27M4 22 L16 28 L28 22 L16 16Z%27 fill=%27%23a9aeb6%27/%3E%3Cpath d=%27M4 12 L16 6 L28 12 L16 18Z%27 fill=%27%23e07b00%27/%3E%3Cpath d=%27M4 12 V22 L16 28 V18Z%27 fill=%27%23d8d2c8%27/%3E%3Cpath d=%27M28 12 V22 L16 28 V18Z%27 fill=%27%23c9c2b6%27/%3E%3C/svg%3E">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IFC-verktøy – 4D og mengder</title>
+<style>
+/* VOICE: rolig, saklig inngang til to arbeidsverktøy.
+   IDEA: et tegningshode – tittel, to "tegninger" å velge mellom, og en kort merknad.
+   PICTURE: to store kort med en enkel tegnet figur av hva verktøyet gjør.
+   COLOUR and TYPE: hvitt ark, blekk #10131a, prøyssisk blå for lenker, oransje for tid; Literata.
+   LAYOUT: tittel øverst, to kort side om side, stablet på smal skjerm. */
+@font-face{font-family:Literata;font-style:normal;font-weight:400;font-display:swap;src:url(vendor/fonts/literata-latin-400-normal.woff2) format('woff2')}
+@font-face{font-family:Literata;font-style:normal;font-weight:600;font-display:swap;src:url(vendor/fonts/literata-latin-600-normal.woff2) format('woff2')}
+:root{color-scheme:light dark;--bg:light-dark(#ffffff,#0f1217);--panel:light-dark(#f6f7f9,#151a22);--ink:light-dark(#10131a,#e7eaf0);--mute:light-dark(#5b6270,#9aa3b2);--line:light-dark(#dde1e7,#273041);--blue:light-dark(#0b4f8a,#6fa8dc);--go:#e07b00}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.55 Literata,Georgia,serif}
+main{max-width:1100px;margin:0 auto;padding:clamp(28px,5vw,64px) max(5vw,16px)}
+h1{font-size:clamp(32px,4.4vw,48px);line-height:1.05;margin:0 0 12px;font-weight:600;text-wrap:balance}
+.lead{color:var(--mute);max-width:62ch;margin:0 0 32px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:20px}
+a.card{display:grid;grid-template-rows:auto auto 1fr;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:inherit;text-decoration:none;overflow:hidden;transition:border-color .15s}
+a.card:hover,a.card:focus-visible{border-color:var(--blue);outline:none}
+a.card svg{display:block;width:100%;height:auto;background:var(--bg);border-bottom:1px solid var(--line)}
+.card h2{font-size:24px;margin:18px 20px 4px;font-weight:600}
+.card p{margin:0 20px 20px;color:var(--mute);font-size:16px}
+.card p b{color:var(--blue);font-weight:600}
+.note{margin-top:32px;font-size:15px;color:var(--mute);max-width:70ch;border-top:1px solid var(--line);padding-top:16px}
+@media(prefers-reduced-motion:reduce){a.card{transition:none}}
+</style>
+</head>
+<body>
+<main>
+<h1>IFC-verktøy for 4D-planlegging og mengder</h1>
+<p class="lead">Koble IFC-modeller til fremdriftsplanen, spill av byggeperioden og ta ut mengder per aktivitet og etasje.</p>
+<div class="cards">
+ <a class="card" href="4d.html">
+  <svg viewBox="0 0 420 170" aria-hidden="true">
+   <g stroke="currentColor" stroke-opacity=".35" fill="none">
+    <path d="M60 120 L170 150 L290 120 L180 90 Z" fill="#a9aeb6" fill-opacity=".5"/>
+    <path d="M60 120 L60 98 L180 68 L290 98 L290 120" />
+    <path d="M60 98 L170 128 L290 98" fill="none"/>
+    <path d="M60 98 L170 128 L170 150 L60 120 Z" fill="#d8d2c8"/>
+    <path d="M170 128 L290 98 L290 120 L170 150 Z" fill="#c9c2b6"/>
+    <path d="M78 80 L170 105 L262 80 L170 56 Z" fill="#e07b00" fill-opacity=".85"/>
+   </g>
+   <g font-family="Literata,serif" font-size="11" fill="currentColor" fill-opacity=".6">
+    <rect x="310" y="40" width="70" height="7" rx="2" fill="#0b4f8a" fill-opacity=".55"/>
+    <rect x="325" y="58" width="55" height="7" rx="2" fill="#0b4f8a" fill-opacity=".55"/>
+    <rect x="345" y="76" width="50" height="7" rx="2" fill="#e07b00"/>
+    <rect x="365" y="94" width="40" height="7" rx="2" fill="#0b4f8a" fill-opacity=".25"/>
+    <line x1="360" y1="30" x2="360" y2="110" stroke="#e07b00" stroke-width="2"/>
+   </g>
+  </svg>
+  <h2>4D-planlegger</h2>
+  <p>Last inn IFC-filer og en plan fra MS Project, koble aktiviteter til elementer og se bygget vokse dag for dag. Arbeidet lagres som en 4D-fil på din PC. <b>Åpne →</b></p>
+ </a>
+ <a class="card" href="ifc-leser.html">
+  <svg viewBox="0 0 420 170" aria-hidden="true">
+   <g stroke="currentColor" stroke-opacity=".35">
+    <path d="M60 120 L170 150 L290 120 L180 90 Z" fill="#a9aeb6" fill-opacity=".5"/>
+    <path d="M60 120 L60 70 L170 100 L170 150 Z" fill="#d8d2c8"/>
+    <path d="M170 100 L290 70 L290 120 L170 150 Z" fill="#c9c2b6"/>
+    <path d="M60 70 L180 40 L290 70 L170 100 Z" fill="#c1121f" fill-opacity=".8"/>
+   </g>
+   <g font-family="Literata,serif" font-size="11" fill="currentColor">
+    <line x1="312" y1="44" x2="400" y2="44" stroke="currentColor" stroke-opacity=".25"/>
+    <line x1="312" y1="64" x2="400" y2="64" stroke="currentColor" stroke-opacity=".25"/>
+    <line x1="312" y1="84" x2="400" y2="84" stroke="currentColor" stroke-opacity=".25"/>
+    <line x1="312" y1="104" x2="400" y2="104" stroke="currentColor" stroke-opacity=".25"/>
+    <text x="312" y="38" fill-opacity=".7">Dekke</text><text x="400" y="38" text-anchor="end" fill-opacity=".7">849 m³</text>
+    <text x="312" y="58" fill-opacity=".7">Vegg</text><text x="400" y="58" text-anchor="end" fill-opacity=".7">3 759 m²</text>
+    <text x="312" y="78" fill-opacity=".7">Søyle</text><text x="400" y="78" text-anchor="end" fill-opacity=".7">27 stk</text>
+   </g>
+  </svg>
+  <h2>IFC-leser</h2>
+  <p>Se en IFC-modell i 3D, filtrer på etasjer og elementtyper, les egenskaper og ta ut mengder til Excel. <b>Åpne →</b></p>
+ </a>
+</div>
+<p class="note">Filene du åpner leses bare i nettleseren på din egen maskin. Ingenting lastes opp eller lagres på serveren. Verktøyene fungerer best i oppdatert Chrome eller Edge, og bare der kan 4D-planleggeren lagre direkte til samme fil.</p>
+</main>
+</body>
+</html>
